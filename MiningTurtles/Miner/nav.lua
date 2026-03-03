@@ -223,4 +223,5 @@ function nav.goto(targetX, targetY, targetZ, mining)
     return true
 end
 
+
 return nav
