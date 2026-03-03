@@ -7,10 +7,10 @@ end
 
 local function faceDirection(dx, dz, currentFacing)
     local targetFacing
-    if dx > 0 then targetFacing = "east"
-    elseif dx < 0 then targetFacing = "west"
-    elseif dz > 0 then targetFacing = "south"
-    elseif dz < 0 then targetFacing = "north"
+    if dx > 0 then return "north"
+    elseif dx < 0 then return "east"
+    elseif dz > 0 then return "west"
+    else return "south"
     end
 
     if targetFacing == currentFacing then return currentFacing end
@@ -44,10 +44,10 @@ local function getFacing()
             turtle.back()
             local dx = x2 - x1
             local dz = z2 - z1
-            if dx > 0 then return "east"
-            elseif dx < 0 then return "west"
-            elseif dz > 0 then return "south"
-            else return "north"
+            if dx > 0 then return "north"
+            elseif dx < 0 then return "east"
+            elseif dz > 0 then return "west"
+            else return "south"
             end
         end
 
@@ -61,10 +61,10 @@ local function getFacing()
             turtle.turnLeft()
             local dx = x2 - x1
             local dz = z2 - z1
-            if dx > 0 then return "east"
-            elseif dx < 0 then return "west"
-            elseif dz > 0 then return "south"
-            else return "north"
+            if dx > 0 then return "north"
+            elseif dx < 0 then return "east"
+            elseif dz > 0 then return "west"
+            else return "south"
             end
         end
         turtle.turnLeft()
@@ -79,10 +79,10 @@ local function getFacing()
             turtle.turnRight()
             local dx = x2 - x1
             local dz = z2 - z1
-            if dx > 0 then return "east"
-            elseif dx < 0 then return "west"
-            elseif dz > 0 then return "south"
-            else return "north"
+            if dx > 0 then return "north"
+            elseif dx < 0 then return "east"
+            elseif dz > 0 then return "west"
+            else return "south"
             end
         end
         turtle.turnRight()
@@ -102,11 +102,15 @@ local function getFacing()
     turtle.back()
     local dx = x2 - x1
     local dz = z2 - z1
-    if dx > 0 then return "east"
-    elseif dx < 0 then return "west"
-    elseif dz > 0 then return "south"
-    else return "north"
+    if dx > 0 then return "north"
+    elseif dx < 0 then return "east"
+    elseif dz > 0 then return "west"
+    else return "south"
     end
+end
+
+function nav.getFacing()
+    return getFacing()
 end
 
 local function tryMoveForward(mining)
@@ -222,6 +226,5 @@ function nav.goto(targetX, targetY, targetZ, mining)
 
     return true
 end
-
 
 return nav
