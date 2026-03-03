@@ -24,4 +24,6 @@ function configure_facing()
     else
         print("Error: No modem found. Please place a modem behind the dock.")
     end
+
+    print("Dock is facing " .. facing)
 end
