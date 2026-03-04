@@ -35,6 +35,7 @@ local function findDock()
             local msg = p2
             if msg.type == "DOCK_AVAILABLE" and msg.miner_id == nil then
                 local dp = msg.pos
+                print(dp)
                 local dist = math.sqrt((dp.x-x)^2 + (dp.y-y)^2 + (dp.z-z)^2)
                 if dist < closest_dist then
                     closest_dist = dist
