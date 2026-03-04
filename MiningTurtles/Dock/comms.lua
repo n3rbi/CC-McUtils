@@ -141,6 +141,10 @@ local function handleMessage(sender, msg)
     end
 end
 
+function comms.handleMessage(sender, msg)
+    handleMessage(sender, msg)
+end
+
 function comms.init(s)
     state = s
     if not openModem() then return false end
