@@ -45,6 +45,8 @@ while true do
         if state.dock_pos and state.status == "Idle" then
             print("Navigating to dock...")
             state.status = "Navigating to Dock"
+            print("Navigating to: " .. state.dock_pos.x .. ", " .. state.dock_pos.y .. ", " .. state.dock_pos.z)
+            print("Dock facing: " .. (p2.facing or "unknown"))
             local success = nav.goto(state.dock_pos.x, state.dock_pos.y, state.dock_pos.z)
             if success then
                 print("Docked successfully.")
