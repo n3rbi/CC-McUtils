@@ -64,7 +64,7 @@ while true do
     local ev, p1, p2, p3 = os.pullEvent()
 
     if ev == "rednet_message" and p3 == PROTOCOL then
-        comms.listen()
+        comms.handleMessage(p1, p2)
 
     elseif ev == "timer" then
         if p1 == miner_timer then
