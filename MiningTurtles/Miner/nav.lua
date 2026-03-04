@@ -1,6 +1,6 @@
 local nav = {}
 
-local HIGH_Y_OFFSET = 25
+local HIGH_Y_OFFSET = 50
 local HIGH_Y_CAP = 100
 
 local function getPos()
@@ -151,4 +151,3 @@ function nav.goto(targetX, targetY, targetZ, mining)
 end
 
 return nav
-
