@@ -61,9 +61,12 @@ local function handleMessage(sender, msg)
         state.miner_id     = msg.miner_id
         state.miner_status = "Idle"
         print("Paired with miner #" .. msg.miner_id)
+        local x, y, z = gps.locate()
         send(msg.miner_id, {
-            type = "DOCK",
-            id   = os.getComputerID()
+            type     = "PAIR_DOCK",
+            dock_id  = os.getComputerID(),
+            dock_pos = { x = x, y = y, z = z },
+            facing   = state.facing
         })
 
     elseif msg.type == "PONG" then

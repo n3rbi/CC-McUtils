@@ -64,8 +64,19 @@ end
 
 local function handleMessage(sender, msg)
     if msg.type == "PAIR_DOCK" then
+        local offsets = {
+            north = { x = 1,  z = 0  },
+            south = { x = -1, z = 0  },
+            east  = { x = 0,  z = 1  },
+            west  = { x = 0,  z = -1 },
+        }
+        local off = offsets[msg.facing] or { x = 0, z = 0 }
         state.dock_id  = msg.dock_id
-        state.dock_pos = msg.dock_pos
+        state.dock_pos = {
+            x = msg.dock_pos.x + off.x,
+            y = msg.dock_pos.y,
+            z = msg.dock_pos.z + off.z
+        }
         print("Paired with dock #" .. msg.dock_id)
 
     elseif msg.type == "DOCK_LOST" then
