@@ -1,7 +1,7 @@
 local comms = {}
 
 local PROTOCOL = "mining_turtles"
-local state = nil
+local state    = nil
 
 local function openModem()
     local modem = peripheral.find("modem")
@@ -28,6 +28,40 @@ local function register()
     print("Broadcast MINER_REGISTER.")
 end
 
+local function findController()
+    print("Searching for controller...")
+    local x, y, z     = gps.locate()
+    local closest_id   = nil
+    local closest_dist = math.huge
+    local timer        = os.startTimer(5)
+
+    rednet.broadcast({
+        type = "MINER_REGISTER",
+        id   = os.getComputerID(),
+        pos  = { x = x, y = y, z = z },
+        fuel = turtle.getFuelLevel()
+    }, PROTOCOL)
+
+    while true do
+        local ev, p1, p2, p3 = os.pullEvent()
+        if ev == "rednet_message" and p3 == PROTOCOL then
+            if p2.type == "CONTROLLER_AVAILABLE" then
+                local cp   = p2.pos
+                local dist = math.sqrt((cp.x-x)^2 + (cp.y-y)^2 + (cp.z-z)^2)
+                if dist < closest_dist then
+                    closest_dist = dist
+                    closest_id   = p1
+                    state.controller_id = p1
+                end
+            end
+        elseif ev == "timer" and p1 == timer then
+            break
+        end
+    end
+
+    return closest_id ~= nil
+end
+
 local function handleMessage(sender, msg)
     if msg.type == "PAIR_DOCK" then
         state.dock_id  = msg.dock_id
@@ -42,7 +76,7 @@ local function handleMessage(sender, msg)
             send(state.controller_id, {
                 type = "MINER_LOST_DOCK",
                 id   = os.getComputerID()
-            }, PROTOCOL)
+            })
         end
 
     elseif msg.type == "PING" then
@@ -71,6 +105,10 @@ function comms.init(s)
     if not openModem() then return false end
     register()
     return true
+end
+
+function comms.findController()
+    return findController()
 end
 
 function comms.handleMessage(sender, msg)

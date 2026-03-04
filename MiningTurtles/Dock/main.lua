@@ -1,8 +1,10 @@
 local comms = require("comms")
 
-local PROTOCOL       = "mining_turtles"
-local PING_INTERVAL  = 15
-local FACING         = "north"
+local PROTOCOL        = "mining_turtles"
+local PING_INTERVAL   = 15
+local CONTROLLER_PING = 30
+local RETRY_DELAY     = 10
+local FACING          = "north"
 
 local state = {
     id             = os.getComputerID(),
@@ -39,15 +41,15 @@ local function drawMonitor()
 
     writeLine(1, "Dock #" .. state.id, colors.yellow)
     hline(2)
-    writeLine(3, "Facing:  " .. state.facing,                                          colors.white)
-    writeLine(4, "Miner:   " .. (state.miner_id and "#" .. state.miner_id or "None"),  colors.white)
-    writeLine(5, "Type:    " .. (state.miner_type   or "Unknown"),                     colors.white)
-    writeLine(6, "Status:  " .. (state.miner_status or "Unknown"),                     colors.lime)
-    writeLine(7, "Fuel:    " .. (state.miner_fuel   and tostring(state.miner_fuel) or "?"), colors.white)
-    writeLine(8, "Job:     " .. (state.curr_job_id  and tostring(state.curr_job_id) or "None"), colors.white)
-    writeLine(9, "Queue:   " .. #state.job_queue,                                      colors.white)
+    writeLine(3,  "Facing:  " .. state.facing, colors.white)
+    writeLine(4,  "Miner:   " .. (state.miner_id and "#" .. state.miner_id or "None"), colors.white)
+    writeLine(5,  "Type:    " .. (state.miner_type   or "Unknown"), colors.white)
+    writeLine(6,  "Status:  " .. (state.miner_status or "Unknown"), colors.lime)
+    writeLine(7,  "Fuel:    " .. (state.miner_fuel   and tostring(state.miner_fuel) or "?"), colors.white)
+    writeLine(8,  "Job:     " .. (state.curr_job_id  and tostring(state.curr_job_id) or "None"), colors.white)
+    writeLine(9,  "Queue:   " .. #state.job_queue, colors.white)
     hline(10)
-    writeLine(11, "Ctrl:  " .. (state.controller_id and "#" .. state.controller_id or "None"), colors.gray)
+    writeLine(11, "Ctrl:    " .. (state.controller_id and "#" .. state.controller_id or "None"), colors.gray)
 end
 
 print("Dock #" .. state.id .. " booting...")
@@ -57,7 +59,8 @@ comms.init(state)
 drawMonitor()
 
 local miner_timer      = os.startTimer(PING_INTERVAL)
-local controller_timer = os.startTimer(PING_INTERVAL + 5)
+local controller_timer = os.startTimer(CONTROLLER_PING)
+local ping_timer       = os.startTimer(PING_INTERVAL + 5)
 
 while true do
     drawMonitor()
@@ -71,9 +74,25 @@ while true do
         if p1 == miner_timer then
             comms.pingMiner()
             miner_timer = os.startTimer(PING_INTERVAL)
-        elseif p1 == controller_timer then
+
+        elseif p1 == ping_timer then
             comms.pingController()
-            controller_timer = os.startTimer(PING_INTERVAL + 5)
+            ping_timer = os.startTimer(PING_INTERVAL + 5)
+
+        elseif p1 == controller_timer then
+            if not state.controller_id then
+                print("No controller found, searching...")
+                local found = false
+                while not found do
+                    found = comms.findController()
+                    if not found then
+                        print("Retrying in " .. RETRY_DELAY .. " seconds...")
+                        sleep(RETRY_DELAY)
+                    end
+                end
+                print("Controller found, resuming.")
+            end
+            controller_timer = os.startTimer(CONTROLLER_PING)
         end
     end
 end

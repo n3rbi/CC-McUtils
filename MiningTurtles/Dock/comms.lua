@@ -1,7 +1,7 @@
 local comms = {}
 
 local PROTOCOL = "mining_turtles"
-local state = nil
+local state    = nil
 
 local function openModem()
     local modem = peripheral.find("modem")
@@ -18,30 +18,27 @@ local function send(id, msg)
 end
 
 local function findController()
-    print("Looking for controller...")
-    local x, y, z = gps.locate()
+    print("Searching for controller...")
+    local x, y, z     = gps.locate()
+    local closest_id   = nil
+    local closest_dist = math.huge
+    local timer        = os.startTimer(5)
+
     rednet.broadcast({
         type = "DOCK_LOOKING",
         pos  = { x = x, y = y, z = z },
         id   = os.getComputerID()
     }, PROTOCOL)
 
-    local closest_id   = nil
-    local closest_dist = math.huge
-    local closest_pos  = nil
-    local timer        = os.startTimer(5)
-
     while true do
         local ev, p1, p2, p3 = os.pullEvent()
         if ev == "rednet_message" and p3 == PROTOCOL then
-            local msg = p2
-            if msg.type == "CONTROLLER_AVAILABLE" then
-                local cp   = msg.pos
+            if p2.type == "CONTROLLER_AVAILABLE" then
+                local cp   = p2.pos
                 local dist = math.sqrt((cp.x-x)^2 + (cp.y-y)^2 + (cp.z-z)^2)
                 if dist < closest_dist then
                     closest_dist = dist
                     closest_id   = p1
-                    closest_pos  = cp
                 end
             end
         elseif ev == "timer" and p1 == timer then
@@ -50,8 +47,7 @@ local function findController()
     end
 
     if closest_id then
-        state.controller_id  = closest_id
-        state.controller_pos = closest_pos
+        state.controller_id = closest_id
         print("Found controller #" .. closest_id)
         return true
     end
@@ -85,6 +81,10 @@ local function handleMessage(sender, msg)
             print("Found controller #" .. sender)
         end
     end
+end
+
+function comms.findController()
+    return findController()
 end
 
 function comms.pingMiner()

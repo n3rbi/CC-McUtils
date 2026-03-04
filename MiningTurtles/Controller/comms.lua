@@ -13,12 +13,12 @@ local function openModem()
     return true
 end
 
-local function broadcast(msg)
-    rednet.broadcast(msg, PROTOCOL)
-end
-
 local function send(id, msg)
     rednet.send(id, msg, PROTOCOL)
+end
+
+local function broadcast(msg)
+    rednet.broadcast(msg, PROTOCOL)
 end
 
 function comms.init(s)
@@ -113,10 +113,10 @@ function comms.broadcastJob(s, from, to)
         status = "pending"
     }
     for id, dock in pairs(state.docks) do
-        rednet.send(id, {
+        send(id, {
             type = "ASSIGN_JOB",
             job  = job
-        }, PROTOCOL)
+        })
     end
 end
 

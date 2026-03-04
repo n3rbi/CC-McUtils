@@ -4,7 +4,15 @@ local connections = require("connections")
 local PROTOCOL = "mining_turtles"
 local scrollOffset = 0
 
-local monitor = peripheral.find("monitor")
+local monitors = {}
+for _, name in ipairs(peripheral.getNames()) do
+    if peripheral.getType(name) == "monitor" then
+        table.insert(monitors, peripheral.wrap(name))
+    end
+end
+
+local mainMonitor = monitors[1]
+local numpadMonitor = monitors[2]
 
 local state = {
     id       = os.getComputerID(),
@@ -19,37 +27,113 @@ local jobInput = {
     field = 1
 }
 
-local fieldOrder = {"fromX","fromY","fromZ","toX","toY","toZ"}
+local fieldOrder  = {"fromX","fromY","fromZ","toX","toY","toZ"}
 local fieldLabels = {"FX","FY","FZ","TX","TY","TZ"}
 
-local function drawMonitor()
-    if not monitor then return end
-    monitor.setTextScale(0.5)
-    monitor.setBackgroundColor(colors.black)
-    monitor.clear()
-    local w, h = monitor.getSize()
+local numpadLayout = {
+    {"7","8","9"},
+    {"4","5","6"},
+    {"1","2","3"},
+    {"-","0","<"},
+    {"    OK    "},
+}
+
+local function drawNumpad()
+    if not numpadMonitor then return end
+    numpadMonitor.setTextScale(0.5)
+    numpadMonitor.setBackgroundColor(colors.black)
+    numpadMonitor.clear()
+    local w, h = numpadMonitor.getSize()
+
+    local function writeBtn(x, row, text, fg, bg)
+        numpadMonitor.setCursorPos(x, row)
+        numpadMonitor.setTextColor(fg or colors.white)
+        numpadMonitor.setBackgroundColor(bg or colors.gray)
+        numpadMonitor.write(text)
+        numpadMonitor.setBackgroundColor(colors.black)
+    end
+
+    numpadMonitor.setCursorPos(1,1)
+    numpadMonitor.setTextColor(colors.yellow)
+    numpadMonitor.write("Numpad")
+
+    for rowIdx, row in ipairs(numpadLayout) do
+        if #row == 1 then
+            writeBtn(1, rowIdx + 1, row[1], colors.white, colors.green)
+        else
+            local colW = math.floor(w / 3)
+            for colIdx, btn in ipairs(row) do
+                local x = (colIdx - 1) * colW + 1
+                writeBtn(x, rowIdx + 1, " " .. btn .. " ", colors.white, colors.gray)
+            end
+        end
+    end
+
+    -- Show currently selected field and its value
+    local key   = fieldOrder[jobInput.field]
+    local label = fieldLabels[jobInput.field]
+    numpadMonitor.setCursorPos(1, #numpadLayout + 3)
+    numpadMonitor.setTextColor(colors.lime)
+    numpadMonitor.write(label .. ": " .. (jobInput[key] == "" and "_" or jobInput[key]))
+end
+
+local function handleNumpadTouch(x, y)
+    if not numpadMonitor then return end
+    local w = numpadMonitor.getSize()
+    local colW = math.floor(w / 3)
+
+    local rowIdx = y - 1
+    if rowIdx < 1 or rowIdx > #numpadLayout then return end
+
+    local row = numpadLayout[rowIdx]
+    local key = fieldOrder[jobInput.field]
+
+    if #row == 1 then
+        -- OK button
+        jobInput.field = (jobInput.field % #fieldOrder) + 1
+    else
+        local colIdx = math.min(3, math.floor((x - 1) / colW) + 1)
+        local btn    = row[colIdx]
+        if btn == "<" then
+            if #jobInput[key] > 0 then
+                jobInput[key] = jobInput[key]:sub(1, -2)
+            end
+        elseif btn == "-" then
+            if jobInput[key] == "" then
+                jobInput[key] = "-"
+            end
+        else
+            jobInput[key] = jobInput[key] .. btn
+        end
+    end
+end
+
+local function drawMainMonitor()
+    if not mainMonitor then return end
+    mainMonitor.setTextScale(0.5)
+    mainMonitor.setBackgroundColor(colors.black)
+    mainMonitor.clear()
+    local w, h = mainMonitor.getSize()
 
     local function write(x, row, text, fg, bg)
-        monitor.setCursorPos(x, row)
-        monitor.setTextColor(fg or colors.white)
-        monitor.setBackgroundColor(bg or colors.black)
-        monitor.write(text:sub(1, w - x + 1))
+        mainMonitor.setCursorPos(x, row)
+        mainMonitor.setTextColor(fg or colors.white)
+        mainMonitor.setBackgroundColor(bg or colors.black)
+        mainMonitor.write(text:sub(1, w - x + 1))
+        mainMonitor.setBackgroundColor(colors.black)
     end
 
     local function hline(row, col)
         write(1, row, string.rep("-", w), col or colors.gray)
     end
 
-    -- Header
     write(1, 1, "Mining Controller #" .. state.id, colors.yellow)
     hline(2)
 
-    -- Body rows available (leave 5 rows at bottom for job input)
-    local bodyStart = 3
-    local bodyEnd   = h - 6
+    local bodyStart  = 3
+    local bodyEnd    = h - 6
     local bodyHeight = bodyEnd - bodyStart + 1
 
-    -- Build render list
     local rows = {}
 
     local sortedDocks = {}
@@ -57,8 +141,7 @@ local function drawMonitor()
     table.sort(sortedDocks, function(a, b) return a.id < b.id end)
 
     for _, dock in ipairs(sortedDocks) do
-        local miner = dock.miner_id and state.miners[dock.miner_id]
-        local minerStr = miner and ("Miner #" .. dock.miner_id) or "Unassigned"
+        local minerStr = dock.miner_id and ("Miner #" .. dock.miner_id) or "Unassigned"
         local typeStr  = dock.miner_type and ("[" .. dock.miner_type .. "]") or "[?]"
         table.insert(rows, {
             text = ("Dock #%-4d %-8s <-> %s"):format(dock.id, typeStr, minerStr),
@@ -74,7 +157,6 @@ local function drawMonitor()
         table.insert(rows, { text = "", col = colors.black })
     end
 
-    -- Unassigned miners
     local unassigned = {}
     for id, m in pairs(state.miners) do
         if not m.dock_id then table.insert(unassigned, "#" .. id) end
@@ -86,17 +168,14 @@ local function drawMonitor()
         })
     end
 
-    -- Scroll indicator
     local maxScroll = math.max(0, #rows - bodyHeight)
-    scrollOffset = math.max(0, math.min(scrollOffset, maxScroll))
+    scrollOffset    = math.max(0, math.min(scrollOffset, maxScroll))
 
     for i = 1, bodyHeight do
-        local rowIdx = i + scrollOffset
-        local row    = rows[rowIdx]
+        local rowIdx    = i + scrollOffset
+        local row       = rows[rowIdx]
         local screenRow = bodyStart + i - 1
-        if row then
-            write(1, screenRow, row.text, row.col)
-        end
+        if row then write(1, screenRow, row.text, row.col) end
     end
 
     if maxScroll > 0 then
@@ -105,10 +184,8 @@ local function drawMonitor()
         write(w, indicRow, "\x95", colors.gray)
     end
 
-    -- Divider
     hline(h - 5)
 
-    -- Job input
     write(1, h - 4, "New Job:", colors.yellow)
 
     local inputRow = h - 3
@@ -117,36 +194,42 @@ local function drawMonitor()
         local label = fieldLabels[i] .. ":"
         local val   = jobInput[key] == "" and "_____" or jobInput[key]
         local fg    = (jobInput.field == i) and colors.lime or colors.white
-        monitor.setCursorPos(col, inputRow)
-        monitor.setTextColor(colors.gray)
-        monitor.write(label)
-        monitor.setTextColor(fg)
-        monitor.write(val .. " ")
+        mainMonitor.setCursorPos(col, inputRow)
+        mainMonitor.setTextColor(colors.gray)
+        mainMonitor.write(label)
+        mainMonitor.setTextColor(fg)
+        mainMonitor.write(val .. " ")
         col = col + #label + #val + 2
     end
 
-    -- Start button
     local btnText = "[ Start Job ]"
     local btnX    = math.floor((w - #btnText) / 2) + 1
-    monitor.setCursorPos(btnX, h - 1)
-    monitor.setBackgroundColor(colors.green)
-    monitor.setTextColor(colors.white)
-    monitor.write(btnText)
-    monitor.setBackgroundColor(colors.black)
+    mainMonitor.setCursorPos(btnX, h - 1)
+    mainMonitor.setBackgroundColor(colors.green)
+    mainMonitor.setTextColor(colors.white)
+    mainMonitor.write(btnText)
+    mainMonitor.setBackgroundColor(colors.black)
 
-    write(1, h, "Click fields to select, type coords, click Start.", colors.gray)
+    write(1, h, "Touch field to select, use numpad to input.", colors.gray)
 end
 
-local function handleMonitorTouch(x, y)
-    if not monitor then return end
-    local w, h = monitor.getSize()
+local function handleMainMonitorTouch(x, y)
+    if not mainMonitor then return end
+    local w, h = mainMonitor.getSize()
 
-    -- Check start button
     local btnText = "[ Start Job ]"
     local btnX    = math.floor((w - #btnText) / 2) + 1
     if y == h - 1 and x >= btnX and x <= btnX + #btnText - 1 then
-        local from = { x = tonumber(jobInput.fromX), y = tonumber(jobInput.fromY), z = tonumber(jobInput.fromZ) }
-        local to   = { x = tonumber(jobInput.toX),   y = tonumber(jobInput.toY),   z = tonumber(jobInput.toZ)   }
+        local from = {
+            x = tonumber(jobInput.fromX),
+            y = tonumber(jobInput.fromY),
+            z = tonumber(jobInput.fromZ)
+        }
+        local to = {
+            x = tonumber(jobInput.toX),
+            y = tonumber(jobInput.toY),
+            z = tonumber(jobInput.toZ)
+        }
         if from.x and from.y and from.z and to.x and to.y and to.z then
             comms.broadcastJob(state, from, to)
             jobInput = { fromX="", fromY="", fromZ="", toX="", toY="", toZ="", field=1 }
@@ -157,68 +240,47 @@ local function handleMonitorTouch(x, y)
         return
     end
 
-    -- Check field clicks on input row
     if y == h - 3 then
-        local col = 1
+        local c = 1
         for i, key in ipairs(fieldOrder) do
-            local label = fieldLabels[i] .. ":"
-            local val   = jobInput[key] == "" and "_____" or jobInput[key]
-            local fieldEnd = col + #label + #val + 1
-            if x >= col and x <= fieldEnd then
+            local label   = fieldLabels[i] .. ":"
+            local val     = jobInput[key] == "" and "_____" or jobInput[key]
+            local fieldEnd = c + #label + #val + 1
+            if x >= c and x <= fieldEnd then
                 jobInput.field = i
                 break
             end
-            col = fieldEnd + 1
+            c = fieldEnd + 1
         end
     end
 end
 
-local function handleChar(c)
-    local key = fieldOrder[jobInput.field]
-    if c == "-" or tonumber(c) then
-        jobInput[key] = jobInput[key] .. c
-    end
-end
-
-local function handleBackspace()
-    local key = fieldOrder[jobInput.field]
-    if #jobInput[key] > 0 then
-        jobInput[key] = jobInput[key]:sub(1, -2)
-    end
-end
-
-local function handleTab()
-    jobInput.field = (jobInput.field % #fieldOrder) + 1
-end
-
--- Boot
 local x, y, z = gps.locate()
 state.pos = { x = x, y = y, z = z }
 print("Controller #" .. state.id .. " booting at " .. x .. "," .. y .. "," .. z)
 
 comms.init(state)
-drawMonitor()
+drawMainMonitor()
+drawNumpad()
 
 while true do
-    drawMonitor()
-    local ev, p1, p2, p3 = os.pullEvent()
+    drawMainMonitor()
+    drawNumpad()
+
+    local ev, p1, p2, p3, p4 = os.pullEvent()
 
     if ev == "rednet_message" and p3 == PROTOCOL then
         comms.handleMessage(p1, p2, state, connections)
-        drawMonitor()
+
+    elseif ev == "monitor_touch" then
+        local mon = peripheral.wrap(p1)
+        if mon == mainMonitor then
+            handleMainMonitorTouch(p2, p3)
+        elseif mon == numpadMonitor then
+            handleNumpadTouch(p2, p3)
+        end
 
     elseif ev == "monitor_scroll" then
         scrollOffset = scrollOffset - p3
-
-    elseif ev == "monitor_touch" then
-        handleMonitorTouch(p2, p3)
-
-    elseif ev == "char" then
-        handleChar(p1)
-
-    elseif ev == "key" then
-        if p1 == keys.backspace then handleBackspace()
-        elseif p1 == keys.tab   then handleTab()
-        end
     end
 end
