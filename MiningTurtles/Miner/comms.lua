@@ -65,8 +65,8 @@ end
 local function handleMessage(sender, msg)
     if msg.type == "PAIR_DOCK" then
         local offsets = {
-            north = { x = 1,  z = 0  },
-            south = { x = -1, z = 0  },
+            north = { x = -1, z = 0  },
+            south = { x = 1,  z = 0  },
             east  = { x = 0,  z = 1  },
             west  = { x = 0,  z = -1 },
         }
