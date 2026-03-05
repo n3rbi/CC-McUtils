@@ -11,14 +11,15 @@ for _, name in ipairs(peripheral.getNames()) do
     end
 end
 
-local mainMonitor = monitors[1]
+local mainMonitor   = monitors[1]
 local numpadMonitor = monitors[2]
 
 local state = {
-    id       = os.getComputerID(),
-    pos      = nil,
-    docks    = {},
-    miners   = {},
+    id         = os.getComputerID(),
+    session_id = os.epoch("utc"),
+    pos        = nil,
+    docks      = {},
+    miners     = {},
 }
 
 local jobInput = {
@@ -53,7 +54,7 @@ local function drawNumpad()
         numpadMonitor.setBackgroundColor(colors.black)
     end
 
-    numpadMonitor.setCursorPos(1,1)
+    numpadMonitor.setCursorPos(1, 1)
     numpadMonitor.setTextColor(colors.yellow)
     numpadMonitor.write("Numpad")
 
@@ -69,7 +70,6 @@ local function drawNumpad()
         end
     end
 
-    -- Show currently selected field and its value
     local key   = fieldOrder[jobInput.field]
     local label = fieldLabels[jobInput.field]
     numpadMonitor.setCursorPos(1, #numpadLayout + 3)
@@ -81,15 +81,11 @@ local function handleNumpadTouch(x, y)
     if not numpadMonitor then return end
     local w = numpadMonitor.getSize()
     local colW = math.floor(w / 3)
-
     local rowIdx = y - 1
     if rowIdx < 1 or rowIdx > #numpadLayout then return end
-
     local row = numpadLayout[rowIdx]
     local key = fieldOrder[jobInput.field]
-
     if #row == 1 then
-        -- OK button
         jobInput.field = (jobInput.field % #fieldOrder) + 1
     else
         local colIdx = math.min(3, math.floor((x - 1) / colW) + 1)
@@ -127,14 +123,13 @@ local function drawMainMonitor()
         write(1, row, string.rep("-", w), col or colors.gray)
     end
 
-    write(1, 1, "Mining Controller #" .. state.id, colors.yellow)
+    write(1, 1, "Mining Controller #" .. state.id .. " [S:" .. state.session_id .. "]", colors.yellow)
     hline(2)
 
     local bodyStart  = 3
     local bodyEnd    = h - 6
     local bodyHeight = bodyEnd - bodyStart + 1
-
-    local rows = {}
+    local rows       = {}
 
     local sortedDocks = {}
     for id, d in pairs(state.docks) do table.insert(sortedDocks, d) end
@@ -185,7 +180,6 @@ local function drawMainMonitor()
     end
 
     hline(h - 5)
-
     write(1, h - 4, "New Job:", colors.yellow)
 
     local inputRow = h - 3
@@ -243,8 +237,8 @@ local function handleMainMonitorTouch(x, y)
     if y == h - 3 then
         local c = 1
         for i, key in ipairs(fieldOrder) do
-            local label   = fieldLabels[i] .. ":"
-            local val     = jobInput[key] == "" and "_____" or jobInput[key]
+            local label    = fieldLabels[i] .. ":"
+            local val      = jobInput[key] == "" and "_____" or jobInput[key]
             local fieldEnd = c + #label + #val + 1
             if x >= c and x <= fieldEnd then
                 jobInput.field = i
@@ -257,7 +251,7 @@ end
 
 local x, y, z = gps.locate()
 state.pos = { x = x, y = y, z = z }
-print("Controller #" .. state.id .. " booting at " .. x .. "," .. y .. "," .. z)
+print("Controller #" .. state.id .. " booting. Session: " .. state.session_id)
 
 comms.init(state)
 drawMainMonitor()
@@ -267,20 +261,20 @@ while true do
     drawMainMonitor()
     drawNumpad()
 
-    local ev, p1, p2, p3, p4 = os.pullEvent()
+    local ev, p1, p2, p3 = os.pullEvent()
 
     if ev == "rednet_message" and p3 == PROTOCOL then
         comms.handleMessage(p1, p2, state, connections)
 
-    elseif ev == "monitor_touch" then
-        local mon = peripheral.wrap(p1)
-        if mon == mainMonitor then
-            handleMainMonitorTouch(p2, p3)
-        elseif mon == numpadMonitor then
-            handleNumpadTouch(p2, p3)
-        end
-
     elseif ev == "monitor_scroll" then
         scrollOffset = scrollOffset - p3
+
+    elseif ev == "monitor_touch" then
+        local name = p1
+        if peripheral.wrap(name) == mainMonitor then
+            handleMainMonitorTouch(p2, p3)
+        elseif peripheral.wrap(name) == numpadMonitor then
+            handleNumpadTouch(p2, p3)
+        end
     end
 end

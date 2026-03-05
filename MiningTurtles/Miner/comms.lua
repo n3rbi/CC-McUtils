@@ -17,15 +17,12 @@ local function send(id, msg)
     rednet.send(id, msg, PROTOCOL)
 end
 
-local function register()
-    local x, y, z = gps.locate()
-    rednet.broadcast({
-        type = "MINER_REGISTER",
-        id   = os.getComputerID(),
-        pos  = { x = x, y = y, z = z },
-        fuel = turtle.getFuelLevel()
-    }, PROTOCOL)
-    print("Broadcast MINER_REGISTER.")
+local function resetPairing()
+    print("Session mismatch, re-registering...")
+    state.dock_id       = nil
+    state.dock_pos      = nil
+    state.controller_id = nil
+    state.session_id    = nil
 end
 
 local function findController()
@@ -49,9 +46,9 @@ local function findController()
                 local cp   = p2.pos
                 local dist = math.sqrt((cp.x-x)^2 + (cp.y-y)^2 + (cp.z-z)^2)
                 if dist < closest_dist then
-                    closest_dist = dist
-                    closest_id   = p1
-                    state.controller_id = p1
+                    closest_dist        = dist
+                    closest_id          = p1
+                    state.session_id    = p2.session_id
                 end
             end
         elseif ev == "timer" and p1 == timer then
@@ -59,10 +56,24 @@ local function findController()
         end
     end
 
-    return closest_id ~= nil
+    if closest_id then
+        state.controller_id = closest_id
+        print("Found controller #" .. closest_id .. " session: " .. tostring(state.session_id))
+        return true
+    end
+
+    print("No controller found.")
+    return false
 end
 
 local function handleMessage(sender, msg)
+    -- Session check
+    if msg.session_id and state.session_id and msg.session_id ~= state.session_id then
+        resetPairing()
+        findController()
+        return
+    end
+
     if msg.type == "PAIR_DOCK" then
         local offsets = {
             north = { x = -1, z = 0  },
@@ -85,19 +96,21 @@ local function handleMessage(sender, msg)
         state.dock_pos = nil
         if state.controller_id then
             send(state.controller_id, {
-                type = "MINER_LOST_DOCK",
-                id   = os.getComputerID()
+                type       = "MINER_LOST_DOCK",
+                id         = os.getComputerID(),
+                session_id = state.session_id
             })
         end
 
     elseif msg.type == "PING" then
         local x, y, z = gps.locate()
         send(sender, {
-            type   = "PONG",
-            id     = os.getComputerID(),
-            status = state.status,
-            pos    = { x = x, y = y, z = z },
-            fuel   = turtle.getFuelLevel()
+            type       = "PONG",
+            id         = os.getComputerID(),
+            status     = state.status,
+            pos        = { x = x, y = y, z = z },
+            fuel       = turtle.getFuelLevel(),
+            session_id = state.session_id
         })
 
     elseif msg.type == "DOCK" then
@@ -106,6 +119,7 @@ local function handleMessage(sender, msg)
     elseif msg.type == "CONTROLLER_AVAILABLE" then
         if not state.controller_id then
             state.controller_id = sender
+            state.session_id    = msg.session_id
             print("Found controller #" .. sender)
         end
     end
@@ -114,7 +128,7 @@ end
 function comms.init(s)
     state = s
     if not openModem() then return false end
-    register()
+    findController()
     return true
 end
 

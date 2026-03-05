@@ -1,7 +1,7 @@
 local comms = {}
 
 local PROTOCOL = "mining_turtles"
-local state = nil
+local state    = nil
 
 local function openModem()
     local modem = peripheral.find("modem")
@@ -14,10 +14,12 @@ local function openModem()
 end
 
 local function send(id, msg)
+    msg.session_id = state.session_id
     rednet.send(id, msg, PROTOCOL)
 end
 
 local function broadcast(msg)
+    msg.session_id = state.session_id
     rednet.broadcast(msg, PROTOCOL)
 end
 
@@ -30,7 +32,7 @@ function comms.init(s)
         id   = os.getComputerID(),
         pos  = { x = x, y = y, z = z }
     })
-    print("Controller broadcast sent.")
+    print("Controller broadcast sent. Session: " .. state.session_id)
     return true
 end
 
@@ -44,7 +46,8 @@ function comms.handleMessage(sender, msg, s, connections)
             id   = os.getComputerID(),
             pos  = { x = x, y = y, z = z }
         })
-        state.docks[sender] = state.docks[sender] or {
+        -- Re-register dock fresh regardless of whether we knew it before
+        state.docks[sender] = {
             id           = sender,
             pos          = msg.pos,
             miner_id     = nil,
@@ -53,17 +56,30 @@ function comms.handleMessage(sender, msg, s, connections)
             queue_length = 0,
             curr_job_id  = nil,
         }
+        -- Clear any miner that was paired to this dock
+        for id, miner in pairs(state.miners) do
+            if miner.dock_id == sender then
+                miner.dock_id = nil
+            end
+        end
         print("Dock #" .. sender .. " registered.")
         connections.tryPair(state, send)
 
     elseif msg.type == "MINER_REGISTER" then
-        state.miners[sender] = state.miners[sender] or {
+        -- Re-register miner fresh
+        state.miners[sender] = {
             id      = sender,
             pos     = msg.pos,
             dock_id = nil,
             status  = "Idle",
             fuel    = msg.fuel,
         }
+        -- Clear any dock that was paired to this miner
+        for id, dock in pairs(state.docks) do
+            if dock.miner_id == sender then
+                dock.miner_id = nil
+            end
+        end
         print("Miner #" .. sender .. " registered.")
         connections.tryPair(state, send)
 
